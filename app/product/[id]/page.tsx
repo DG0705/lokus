@@ -1,7 +1,7 @@
 'use client';
 
 import { useCart } from '@/app/context/CartContext';
-import { supabase } from '@/app/lib/supabase';
+import { createClient } from '@/utils/supabase/client';
 import { notFound, useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -18,6 +18,7 @@ export default function ProductPage() {
 
   useEffect(() => {
     async function fetchProduct() {
+      const supabase = createClient();
       const { data, error } = await supabase
         .from('products')
         .select('*')

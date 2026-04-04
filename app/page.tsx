@@ -6,11 +6,12 @@ import NewsletterForm from './components/NewsletterForm';
 export const dynamic = 'force-dynamic';
 
 async function getFeaturedProducts() {
-  const { data, error } = await supabase
+  const supabaseClient = await supabase();
+  const { data, error } = await supabaseClient
     .from('products')
     .select('id, name, price, image_url')
     .limit(3);
-
+  
   if (error || !data) return [];
   return data;
 }
