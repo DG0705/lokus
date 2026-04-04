@@ -1,12 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import Razorpay from "razorpay";
 
-const razorpay = new Razorpay({
-  key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
-  key_secret: process.env.RAZORPAY_KEY_SECRET!,
-});
+// Prevent static generation of this API route
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+  // Check if environment variables are present
+  if (!process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+    console.error("Missing Razorpay environment variables");
+    return NextResponse.json(
+      { error: "Payment service not configured" },
+      { status: 500 }
+    );
+  }
+
+  const razorpay = new Razorpay({
+    key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
+  });
+
   try {
     const { amount, currency = "INR" } = await request.json();
 
@@ -17,9 +29,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Amount should be in paise (e.g., INR 129 = 12900 paise)
     const options = {
-      amount: amount * 100,
+      amount: amount * 100, // Convert to paise (e.g., ₹129 = 12900 paise)
       currency,
       receipt: `receipt_${Date.now()}`,
     };

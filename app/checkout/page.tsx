@@ -16,22 +16,15 @@ export default function CheckoutPage() {
 
   const handlePayment = async () => {
     setLoading(true);
-
     try {
-      // 1. Create an order on your backend
       const response = await fetch('/api/create-razorpay-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: totalPrice }),
       });
-
       const orderData = await response.json();
+      if (!orderData.id) throw new Error('Failed to create order');
 
-      if (!orderData.id) {
-        throw new Error('Failed to create order');
-      }
-
-      // 2. Configure Razorpay checkout
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: orderData.amount,
@@ -40,26 +33,14 @@ export default function CheckoutPage() {
         description: `Payment for order ${orderData.id}`,
         order_id: orderData.id,
         handler: async function (response: any) {
-          // Payment is successful
           console.log('Payment Success:', response);
           clearCart();
           window.location.href = `/success?payment_id=${response.razorpay_payment_id}&order_id=${response.razorpay_order_id}`;
         },
-        prefill: {
-          name: 'LOKUS Customer',
-          email: 'customer@lokus.com',
-        },
-        theme: {
-          color: '#000000',
-        },
-        modal: {
-          ondismiss: function() {
-            setLoading(false);
-            console.log('Checkout form closed');
-          }
-        }
+        prefill: { name: 'LOKUS Customer', email: 'customer@lokus.com' },
+        theme: { color: '#000000' },
+        modal: { ondismiss: () => setLoading(false) }
       };
-
       const razorpay = new window.Razorpay(options);
       razorpay.open();
     } catch (error) {
