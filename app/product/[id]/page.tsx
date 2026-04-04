@@ -1,58 +1,76 @@
+'use client';
+
+import { useCart } from '@/app/context/CartContext';
 import { supabase } from '@/app/lib/supabase';
-import { notFound } from 'next/navigation';
+import { notFound, useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
-// Force dynamic rendering – no static generation at build time
-export const dynamic = 'force-dynamic';
+export default function ProductPage() {
+  const params = useParams();
+  const id = params.id as string;
+  const { addItem } = useCart();
 
-interface ProductPageProps {
-  params: { id: string };
-}
+  const [product, setProduct] = useState<any>(null);
+  const [selectedSize, setSelectedSize] = useState<number | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [added, setAdded] = useState(false);
 
-export default async function ProductPage({ params }: ProductPageProps) {
-  let product = null;
-  let error = null;
+  useEffect(() => {
+    async function fetchProduct() {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error || !data) {
+        notFound();
+      } else {
+        setProduct(data);
+        if (data.sizes?.length) setSelectedSize(data.sizes[0]);
+        if (data.colors?.length) setSelectedColor(data.colors[0]);
+      }
+      setLoading(false);
+    }
+    fetchProduct();
+  }, [id]);
 
-  try {
-    const { data, error: dbError } = await supabase
-      .from('products')
-      .select('*')
-      .eq('id', params.id)
-      .single();
-    
-    if (dbError) throw dbError;
-    product = data;
-  } catch (err) {
-    console.error('Failed to fetch product:', err);
-    error = err;
-  }
+  const handleAddToCart = () => {
+    if (!selectedSize || !selectedColor) {
+      alert('Please select size and color');
+      return;
+    }
+    addItem({
+      productId: product.id,
+      name: product.name,
+      price: product.price,
+      size: selectedSize,
+      color: selectedColor,
+      image_url: product.image_url,
+      quantity: 1,
+    });
+    setAdded(true);
+    setTimeout(() => setAdded(false), 2000);
+  };
 
-  if (!product || error) {
-    notFound();
-  }
+  if (loading) return <div className="text-center py-20">Loading...</div>;
+  if (!product) return notFound();
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-12">
       <div className="grid md:grid-cols-2 gap-12">
-        {/* Product Image */}
         <div className="bg-gray-100 rounded-2xl h-96 flex items-center justify-center overflow-hidden">
           {product.image_url ? (
-            <img 
-              src={product.image_url} 
-              alt={product.name}
-              className="w-full h-full object-cover"
-            />
+            <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
           ) : (
             <span className="text-6xl">👟</span>
           )}
         </div>
-
-        {/* Product Info */}
         <div>
           <h1 className="text-3xl font-bold mb-2">{product.name}</h1>
           <p className="text-2xl text-gray-600 mb-4">${product.price}</p>
-          <p className="text-gray-700 mb-6">{product.description || 'Premium footwear for the modern path.'}</p>
+          <p className="text-gray-700 mb-6">{product.description}</p>
 
-          {/* Size Selector */}
           {product.sizes && product.sizes.length > 0 && (
             <div className="mb-6">
               <h3 className="font-medium mb-2">Size</h3>
@@ -60,7 +78,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 {product.sizes.map((size: number) => (
                   <button
                     key={size}
-                    className="border border-gray-300 rounded-lg px-4 py-2 hover:border-black transition"
+                    onClick={() => setSelectedSize(size)}
+                    className={`border rounded-lg px-4 py-2 transition ${
+                      selectedSize === size ? 'border-black bg-black text-white' : 'border-gray-300 hover:border-black'
+                    }`}
                   >
                     {size}
                   </button>
@@ -69,7 +90,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
             </div>
           )}
 
-          {/* Color Selector */}
           {product.colors && product.colors.length > 0 && (
             <div className="mb-8">
               <h3 className="font-medium mb-2">Color</h3>
@@ -77,7 +97,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 {product.colors.map((color: string) => (
                   <button
                     key={color}
-                    className="border border-gray-300 rounded-lg px-4 py-2 hover:border-black transition"
+                    onClick={() => setSelectedColor(color)}
+                    className={`border rounded-lg px-4 py-2 transition ${
+                      selectedColor === color ? 'border-black bg-black text-white' : 'border-gray-300 hover:border-black'
+                    }`}
                   >
                     {color}
                   </button>
@@ -86,8 +109,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
             </div>
           )}
 
-          <button className="w-full bg-black text-white py-3 rounded-full hover:bg-gray-800 transition font-medium">
-            Add to Cart
+          <button
+            onClick={handleAddToCart}
+            className="w-full bg-black text-white py-3 rounded-full hover:bg-gray-800 transition font-medium"
+          >
+            {added ? '✓ Added to Cart' : 'Add to Cart'}
           </button>
         </div>
       </div>

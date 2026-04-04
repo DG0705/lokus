@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import Script from "next/script"; // <-- Import the Script component
+import { CartProvider } from "./context/CartContext";
+import Navbar from "./components/Navbar";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -16,23 +19,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <Script
+          src="https://checkout.razorpay.com/v1/checkout.js"
+          strategy="lazyOnload"
+        />
+      </head>
       <body className={inter.className}>
-        {/* Navigation Bar */}
-        <nav className="border-b border-gray-100">
-          <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-            <a href="/" className="text-xl font-bold tracking-tight">
-              LOKUS
-            </a>
-            <div className="space-x-6">
-              <a href="/men" className="text-gray-600 hover:text-black">Men</a>
-              <a href="/women" className="text-gray-600 hover:text-black">Women</a>
-              <a href="/cart" className="text-gray-600 hover:text-black">Cart (0)</a>
-            </div>
-          </div>
-        </nav>
-
-        {/* Page Content */}
-        {children}
+        <CartProvider>
+          <Navbar />
+          {children}
+        </CartProvider>
       </body>
     </html>
   );
