@@ -3,8 +3,9 @@ import { createHmac } from 'crypto';
 
 import { createDeliveryJobForOrder } from '@/app/lib/delivery-server';
 import type { CartItem } from '@/app/lib/types';
-import { escapeHtml, sendOfficialMail } from '@/app/lib/mailer';
-import { createClient } from '@/utils/supabase/server';
+import { deliverOfficialMail, escapeHtml } from '@/app/lib/mailer';
+import { createAdminClient, hasServiceRoleAccess } from '@/utils/supabase/admin';
+import { createClient as createUserClient } from '@/utils/supabase/server';
 
 type SaveOrderRequest = {
   orderData: {
@@ -26,14 +27,62 @@ type SaveOrderRequest = {
   userId: string | null;
 };
 
+function buildOrderInsert(
+  orderData: SaveOrderRequest['orderData'],
+  userId: string | null,
+  options?: { legacy?: boolean }
+) {
+  const legacy = options?.legacy ?? false;
+
+  const baseInsert = {
+    user_id: userId || null,
+    order_number: `LOK-${Date.now()}`,
+    total_amount: orderData.amount,
+    status: legacy ? 'paid' : 'ready_to_dispatch',
+    payment_id: orderData.payment_id,
+    razorpay_order_id: orderData.order_id,
+    shipping_address: orderData.shipping_address || null,
+  };
+
+  if (legacy) {
+    return baseInsert;
+  }
+
+  return {
+    ...baseInsert,
+    customer_name: orderData.customer_name || null,
+    customer_email: orderData.customer_email || null,
+    customer_phone: orderData.customer_phone || null,
+    address_line1: orderData.address_line1 || null,
+    address_line2: orderData.address_line2 || null,
+    city: orderData.city || null,
+    state: orderData.state || null,
+    postal_code: orderData.postal_code || null,
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const userSupabase = await createUserClient();
+    const adminSupabase = createAdminClient();
     const { orderData, items, userId } = (await request.json()) as SaveOrderRequest;
     const secret = process.env.RAZORPAY_KEY_SECRET;
+    const {
+      data: { user },
+    } = await userSupabase.auth.getUser();
 
     if (!secret) {
       throw new Error('Missing Razorpay secret for payment verification.');
+    }
+
+    if (!hasServiceRoleAccess() && !user) {
+      return NextResponse.json(
+        {
+          error:
+            'Guest checkout is not enabled yet. Add SUPABASE_SERVICE_ROLE_KEY on the server or sign in before payment.',
+        },
+        { status: 503 }
+      );
     }
 
     const expectedSignature = createHmac('sha256', secret)
@@ -44,31 +93,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Payment verification failed.' }, { status: 400 });
     }
 
-    const orderInsert = {
-      user_id: userId || null,
-      order_number: `LOK-${Date.now()}`,
-      total_amount: orderData.amount,
-      status: 'ready_to_dispatch',
-      payment_id: orderData.payment_id,
-      razorpay_order_id: orderData.order_id,
-      shipping_address: orderData.shipping_address || null,
-      customer_name: orderData.customer_name || null,
-      customer_email: orderData.customer_email || null,
-      customer_phone: orderData.customer_phone || null,
-      address_line1: orderData.address_line1 || null,
-      address_line2: orderData.address_line2 || null,
-      city: orderData.city || null,
-      state: orderData.state || null,
-      postal_code: orderData.postal_code || null,
-    };
-
-    const { data: order, error: orderError } = await supabase
+    const supabase = adminSupabase ?? userSupabase;
+    const orderOwnerId = user?.id ?? userId ?? null;
+    const modernInsert = buildOrderInsert(orderData, orderOwnerId);
+    const { data: modernOrder, error: modernOrderError } = await supabase
       .from('orders')
-      .insert(orderInsert)
+      .insert(modernInsert)
       .select()
       .single();
 
-    if (orderError) throw orderError;
+    let order = modernOrder;
+    let usedLegacyInsert = false;
+
+    if (modernOrderError || !order) {
+      console.warn('Modern order insert fallback:', modernOrderError);
+
+      const legacyInsert = buildOrderInsert(orderData, orderOwnerId, { legacy: true });
+      const { data: legacyOrder, error: legacyOrderError } = await supabase
+        .from('orders')
+        .insert(legacyInsert)
+        .select()
+        .single();
+
+      if (legacyOrderError || !legacyOrder) {
+        throw legacyOrderError || modernOrderError || new Error('Unable to create order record.');
+      }
+
+      order = legacyOrder;
+      usedLegacyInsert = true;
+    }
 
     const orderItems = items.map((item) => ({
       order_id: order.id,
@@ -83,7 +136,13 @@ export async function POST(request: NextRequest) {
     const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
     if (itemsError) throw itemsError;
 
-    await createDeliveryJobForOrder(supabase, order);
+    if (!usedLegacyInsert) {
+      try {
+        await createDeliveryJobForOrder(supabase, order);
+      } catch (deliveryError) {
+        console.warn('Delivery job warning:', deliveryError);
+      }
+    }
 
     const customerName = orderData.customer_name || 'Customer';
     const customerEmail = orderData.customer_email;
@@ -94,7 +153,7 @@ export async function POST(request: NextRequest) {
           .map((item) => `${item.name} x${item.quantity} - Rs. ${item.price * item.quantity}`)
           .join('\n');
 
-        await sendOfficialMail({
+        await deliverOfficialMail({
           to: customerEmail,
           subject: `Order confirmed | ${order.order_number}`,
           text: `Hi ${customerName},\n\nYour LOKUS order ${order.order_number} is confirmed.\n\n${orderSummary}\n\nShipping address:\n${orderData.shipping_address || 'Will be updated soon.'}`,
@@ -106,7 +165,7 @@ export async function POST(request: NextRequest) {
           `,
         });
 
-        await sendOfficialMail({
+        await deliverOfficialMail({
           to: process.env.MAIL_TO_SUPPORT || 'support@lokus.store',
           subject: `New paid order | ${order.order_number}`,
           replyTo: customerEmail,

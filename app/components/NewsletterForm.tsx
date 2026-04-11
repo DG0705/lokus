@@ -20,12 +20,12 @@ export default function NewsletterForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as { error?: string; message?: string };
       if (!response.ok) {
         throw new Error(data.error || 'Unable to join the list right now.');
       }
       setStatus('success');
-      setMessage('You are on the LOKUS list.');
+      setMessage(data.message || 'You are on the LOKUS list.');
       setEmail('');
       window.setTimeout(() => setStatus('idle'), 3000);
     } catch (error) {
@@ -43,7 +43,7 @@ export default function NewsletterForm() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           placeholder="Enter your email"
-          className="min-w-0 flex-1 rounded-full border border-[var(--color-border)] bg-white/80 px-5 py-3 text-sm outline-none transition focus:border-[var(--color-ember)]"
+          className="min-w-0 flex-1 rounded-full border border-[var(--color-border)] bg-white/80 px-5 py-3 text-sm text-[var(--color-foreground)] outline-none transition focus:border-[var(--color-ember)]"
           required
           disabled={status === 'loading'}
         />

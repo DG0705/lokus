@@ -2,12 +2,29 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useSyncExternalStore } from 'react';
 
 import { formatPrice } from '@/app/lib/format';
 import { useCart } from '@/app/context/CartContext';
 
 export default function CartPage() {
+  const hydrated = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false
+  );
   const { items, removeItem, updateQuantity, totalItems, totalPrice } = useCart();
+
+  if (!hydrated) {
+    return (
+      <main className="section-wrap py-20">
+        <div className="premium-card flex min-h-[28rem] flex-col items-center justify-center px-8 text-center">
+          <p className="text-[11px] uppercase tracking-[0.28em] text-[var(--color-muted-foreground)]">Cart</p>
+          <h1 className="mt-4 font-display text-6xl">Loading your cart...</h1>
+        </div>
+      </main>
+    );
+  }
 
   if (!items.length) {
     return (

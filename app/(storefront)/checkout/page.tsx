@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 
 import { validateCheckoutForm } from '@/app/lib/checkout';
 import { formatPrice, formatShippingAddress } from '@/app/lib/format';
@@ -65,6 +65,11 @@ function readStoredCheckoutDetails() {
 }
 
 export default function CheckoutPage() {
+  const hydrated = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false
+  );
   const { items, totalPrice, clearCart } = useCart();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -86,6 +91,16 @@ export default function CheckoutPage() {
   const updateField = (field: keyof CheckoutFormValues, value: string) => {
     setFormValues((prev) => ({ ...prev, [field]: value }));
   };
+
+  if (!hydrated) {
+    return (
+      <main className="section-wrap py-20">
+        <div className="premium-card flex min-h-[26rem] flex-col items-center justify-center px-8 text-center">
+          <h1 className="font-display text-5xl">Loading checkout...</h1>
+        </div>
+      </main>
+    );
+  }
 
   const handlePayment = async () => {
     if (!items.length) return;

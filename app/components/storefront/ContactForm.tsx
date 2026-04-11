@@ -21,7 +21,7 @@ const initialState: FormState = {
 export function ContactForm() {
   const [formState, setFormState] = useState<FormState>(initialState);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
   const updateField = (field: keyof FormState, value: string) => {
     setFormState((prev) => ({ ...prev, [field]: value }));
@@ -30,7 +30,7 @@ export function ContactForm() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setStatus('loading');
-    setError('');
+    setMessage('');
 
     try {
       const response = await fetch('/api/contact', {
@@ -39,16 +39,17 @@ export function ContactForm() {
         body: JSON.stringify(formState),
       });
 
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as { error?: string; message?: string };
       if (!response.ok) {
         throw new Error(data.error || 'Failed to send message.');
       }
 
       setFormState(initialState);
       setStatus('success');
+      setMessage(data.message || 'Your message is on its way to the LOKUS desk.');
     } catch (submissionError) {
       setStatus('error');
-      setError(submissionError instanceof Error ? submissionError.message : 'Failed to send message.');
+      setMessage(submissionError instanceof Error ? submissionError.message : 'Failed to send message.');
     }
   };
 
@@ -89,10 +90,10 @@ export function ContactForm() {
       </label>
 
       {status === 'error' ? (
-        <p className="text-sm text-red-600">{error}</p>
+        <p className="text-sm text-red-600">{message}</p>
       ) : null}
       {status === 'success' ? (
-        <p className="text-sm text-[var(--color-ember)]">Your message is on its way to the LOKUS desk.</p>
+        <p className="text-sm text-[var(--color-ember)]">{message}</p>
       ) : null}
 
       <button

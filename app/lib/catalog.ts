@@ -56,8 +56,9 @@ export async function getProducts(filters: CatalogFilters = {}) {
     case 'newest':
       query = query.order('id', { ascending: false });
       break;
+    case 'featured':
     default:
-      query = query.order('id', { ascending: false });
+      query = query.order('is_featured', { ascending: false }).order('id', { ascending: false });
       break;
   }
 
@@ -71,6 +72,7 @@ export async function getFeaturedProducts(limit = 6) {
   const { data, error } = await client
     .from('products')
     .select('*')
+    .order('is_featured', { ascending: false })
     .order('id', { ascending: false })
     .limit(limit);
 

@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 
 import { BRAND_NAME, navLinks } from '@/app/lib/constants';
 import { useAuth } from '@/app/context/AuthContext';
@@ -14,8 +14,15 @@ export function StorefrontHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { totalItems } = useCart();
   const { user, signOut } = useAuth();
+  const mounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false
+  );
 
   const closeMenu = () => setMenuOpen(false);
+  const displayTotalItems = mounted ? totalItems : 0;
+  const displayUser = mounted ? user : null;
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[color:color-mix(in_srgb,var(--color-background)_84%,transparent)] backdrop-blur-xl">
@@ -41,9 +48,9 @@ export function StorefrontHeader() {
         </nav>
         <div className="hidden items-center gap-5 lg:flex">
           <Link href="/cart" className="text-sm uppercase tracking-[0.22em] text-[var(--color-muted-foreground)] transition hover:text-[var(--color-foreground)]">
-            Cart ({totalItems})
+            Cart ({displayTotalItems})
           </Link>
-          {user ? (
+          {displayUser ? (
             <>
               <Link href="/account" className="text-sm uppercase tracking-[0.22em] text-[var(--color-muted-foreground)] transition hover:text-[var(--color-foreground)]">
                 Account
@@ -91,9 +98,9 @@ export function StorefrontHeader() {
                 </Link>
               ))}
               <Link href="/cart" onClick={closeMenu} className="text-sm uppercase tracking-[0.24em] text-[var(--color-foreground)]">
-                Cart ({totalItems})
+                Cart ({displayTotalItems})
               </Link>
-              {user ? (
+              {displayUser ? (
                 <>
                   <Link href="/account" onClick={closeMenu} className="text-sm uppercase tracking-[0.24em] text-[var(--color-foreground)]">
                     Account

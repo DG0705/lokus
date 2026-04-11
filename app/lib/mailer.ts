@@ -1,3 +1,5 @@
+import { appendFile, mkdir } from 'fs/promises';
+import path from 'path';
 import nodemailer from 'nodemailer';
 
 type MailPayload = {
@@ -9,6 +11,24 @@ type MailPayload = {
 };
 
 let transporter: nodemailer.Transporter | null | undefined;
+
+async function writeMailPreview(payload: MailPayload) {
+  const directory = path.join(process.cwd(), 'tmp');
+  const filePath = path.join(directory, 'mail-preview.log');
+
+  await mkdir(directory, { recursive: true });
+  await appendFile(
+    filePath,
+    `${JSON.stringify({
+      createdAt: new Date().toISOString(),
+      to: payload.to,
+      subject: payload.subject,
+      replyTo: payload.replyTo ?? null,
+      text: payload.text,
+    })}\n`,
+    'utf8'
+  );
+}
 
 function getTransporter() {
   if (transporter !== undefined) {
@@ -42,6 +62,10 @@ export function isMailConfigured() {
   return Boolean(getTransporter() && process.env.MAIL_FROM);
 }
 
+export function getMailDeliveryMode() {
+  return isMailConfigured() ? 'smtp' : 'preview';
+}
+
 export function escapeHtml(value: string) {
   return value
     .replace(/&/g, '&amp;')
@@ -51,12 +75,13 @@ export function escapeHtml(value: string) {
     .replace(/'/g, '&#39;');
 }
 
-export async function sendOfficialMail(payload: MailPayload) {
+export async function deliverOfficialMail(payload: MailPayload) {
   const activeTransporter = getTransporter();
   const from = process.env.MAIL_FROM;
 
   if (!activeTransporter || !from) {
-    throw new Error('Official LOKUS email is not configured. Add SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and MAIL_FROM.');
+    await writeMailPreview(payload);
+    return { mode: 'preview' as const };
   }
 
   await activeTransporter.sendMail({
@@ -67,4 +92,14 @@ export async function sendOfficialMail(payload: MailPayload) {
     text: payload.text,
     replyTo: payload.replyTo,
   });
+
+  return { mode: 'smtp' as const };
+}
+
+export async function sendOfficialMail(payload: MailPayload) {
+  const result = await deliverOfficialMail(payload);
+
+  if (result.mode !== 'smtp') {
+    throw new Error('Official LOKUS email is not configured. Add SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and MAIL_FROM.');
+  }
 }
